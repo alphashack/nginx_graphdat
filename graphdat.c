@@ -1,4 +1,5 @@
 #include "graphdat.h"
+#include "list.h"
 
 #include <sys/types.h>
 #include <unistd.h>
@@ -9,11 +10,19 @@
 #include <stdio.h>
 #include <errno.h>
 #include <msgpack.h>
+#include <pthread.h>
 
 static bool s_init = false;
+static bool s_running = true;
 static char * s_sockfile = NULL;
 static int s_sockfd = -1;
 static bool s_lastwaserror = false;
+static list_t s_requests;
+
+static pthread_mutex_t s_mux = PTHREAD_MUTEX_INITIALIZER;
+static pthread_t s_thread;
+
+void graphdat_send(char* method, int methodlen, char* uri, int urilen, uintptr_t msec, ngx_log_t *log);
 
 void socket_close() {
 debug("socket_close\n");
@@ -21,11 +30,27 @@ debug("socket_close\n");
 	s_sockfd = -1;
 }
 
+void del_request(request_t * req) {
+	free(req->log);
+	free(req->uri);
+	free(req->method);
+	free(req);	
+}
+
+void dlg_del_request(void * item) {
+debug("dellist\n");
+	request_t * req = (request_t *)item;
+	del_request(req);
+}
+
 void socket_term() {
 debug("socket_term\n");
         if(s_init) {
+            s_running = false;
+            pthread_join(s_thread, NULL);
 	    socket_close();
 	    free(s_sockfile);
+            listDel(s_requests, dlg_del_request);
         }
 }
 
@@ -75,17 +100,46 @@ bool socket_check(ngx_log_t *log) {
 	return socket_connect(log);
 }
 
+void* worker(
+	void* arg)
+{
+	request_t *req;
+
+	while(s_running) {
+debug("worker\n");
+		// background thread:
+		pthread_mutex_lock(&s_mux);
+		req = listRemoveFront(s_requests);
+		pthread_mutex_unlock(&s_mux);
+
+		if(req != NULL) {
+			graphdat_send(req->method, req->methodlen, req->uri, req->urilen, req->msec, req->log);
+			del_request(req);
+		}
+		else
+		{
+			sleep(1);
+		}
+	}
+debug("worker exiting\n");
+	return NULL;
+}
+
 void socket_init(ngx_str_t file, ngx_log_t *log) {
 debug("socket_init\n");
 	s_sockfile = malloc(file.len + 1);
 	memcpy(s_sockfile, file.data, file.len);
 	s_sockfile[file.len] = 0;
 	s_sockfd = -1;
+	s_requests = listNew();
+	pthread_create(&s_thread, NULL, worker, NULL);
 	s_init = true;
 }
 
 void socket_send(char * data, int len, ngx_log_t *log) {
 	if(!socket_check(log)) return;
+
+ngx_log_error(NGX_LOG_ERR, log, 0, "socket_send");
 
 	unsigned char bytes[4];
 	bytes[0] = len >> 24;
@@ -156,4 +210,28 @@ void graphdat_send(char* method, int methodlen, char* uri, int urilen, uintptr_t
 	msgpack_sbuffer_free(buffer);
         msgpack_packer_free(pk);
 }
+
+void graphdat_store(char* method, int methodlen, char* uri, int urilen, uintptr_t msec, ngx_log_t *log) {
+	request_t *req = malloc(sizeof(request_t));
+	// method
+	req->method = malloc(methodlen);
+	memcpy(req->method, method, methodlen);
+	req->methodlen = methodlen;
+	// uri
+	req->uri = malloc(urilen);
+	memcpy(req->uri, uri, urilen);
+	req->urilen = urilen;
+	// msec
+	req->msec = msec;
+	// log
+	req->log = malloc(sizeof(ngx_log_t));
+	memcpy(req->log, log, sizeof(ngx_log_t));
+
+	pthread_mutex_lock(&s_mux);
+	listAppendBack(s_requests, req);
+	pthread_mutex_unlock(&s_mux);
+
+debug("list len %d\n", listCount(s_requests));
+}
+
 

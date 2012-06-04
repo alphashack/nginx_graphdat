@@ -20,8 +20,8 @@ static ngx_int_t ngx_http_graphdat_filter_init(ngx_conf_t*);
 static ngx_int_t ngx_http_graphdat_header_filter(ngx_http_request_t*);
 static char * ngx_http_graphdat_init_main_conf(ngx_conf_t*, void*);
 static void * ngx_http_graphdat_create_main_conf(ngx_conf_t*);
-static ngx_int_t ngx_http_graphdat_init_module(ngx_cycle_t*);
-static void ngx_http_graphdat_exit_master(ngx_cycle_t*);
+static ngx_int_t ngx_http_graphdat_init_process(ngx_cycle_t*);
+static void ngx_http_graphdat_exit_process(ngx_cycle_t*);
 
 static ngx_http_output_header_filter_pt ngx_http_next_header_filter;
 
@@ -65,12 +65,12 @@ ngx_module_t  ngx_http_graphdat_filter_module = {
     ngx_http_graphdat_filter_commands,     /* module directives */
     NGX_HTTP_MODULE,                       /* module type */
     NULL,                                  /* init master */
-    ngx_http_graphdat_init_module,         /* init module */
-    NULL,                                  /* init process */
+    NULL,                                  /* init module */
+    ngx_http_graphdat_init_process,        /* init process */
     NULL,                                  /* init thread */
     NULL,                                  /* exit thread */
-    NULL,                                  /* exit process */
-    ngx_http_graphdat_exit_master,         /* exit master */
+    ngx_http_graphdat_exit_process,        /* exit process */
+    NULL,                                  /* exit master */
     NGX_MODULE_V1_PADDING
 };
 
@@ -124,7 +124,7 @@ ngx_uint_t time = t.tv_sec * 1000000 + t.tv_usec;
 	ngx_gettimeofday(&tv);
 	msec_diff = (tv.tv_sec - r->start_sec) * 1000 + (tv.tv_usec / 1000) - r->start_msec + 123;
 
-	graphdat_send((char*)r->method_name.data, r->method_name.len, (char*)r->uri.data, r->uri.len, msec_diff, r->connection->log);
+	graphdat_store((char*)r->method_name.data, r->method_name.len, (char*)r->uri.data, r->uri.len, msec_diff, r->connection->log);
 
 /*
 ngx_gettimeofday(&t);
@@ -147,8 +147,8 @@ debug("filter_init\n");
     return NGX_OK;
 }
 
-static ngx_int_t ngx_http_graphdat_init_module(ngx_cycle_t* cycle) {
-debug("init_module\n");
+static ngx_int_t ngx_http_graphdat_init_process(ngx_cycle_t* cycle) {
+debug("init_process\n");
     ngx_http_graphdat_conf_t *conf;
     conf = ngx_http_cycle_get_module_main_conf(cycle, ngx_http_graphdat_filter_module);
     s_enabled = conf->enable;
@@ -159,8 +159,8 @@ debug("init_module\n");
     return NGX_OK;
 }
 
-static void ngx_http_graphdat_exit_master(ngx_cycle_t* cycle) {
-debug("exit_master\n");
+static void ngx_http_graphdat_exit_process(ngx_cycle_t* cycle) {
+debug("exit_process\n");
     if(s_enabled) {
         graphdat_term();
     }
