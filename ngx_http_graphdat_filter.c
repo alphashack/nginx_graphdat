@@ -111,10 +111,12 @@ debug("filter\n");
     if (s_enabled)
     {
 
+/*
 FILE * fp = fopen("/tmp/trace.log", "a");
 struct timeval t;
 ngx_gettimeofday(&t);
 ngx_uint_t time = t.tv_sec * 1000000 + t.tv_usec;
+*/
 
 	struct timeval tv;
 	ngx_uint_t msec_diff;
@@ -124,10 +126,12 @@ ngx_uint_t time = t.tv_sec * 1000000 + t.tv_usec;
 
 	graphdat_send((char*)r->method_name.data, r->method_name.len, (char*)r->uri.data, r->uri.len, msec_diff, r->connection->log);
 
+/*
 ngx_gettimeofday(&t);
 ngx_uint_t time2 = t.tv_sec * 1000000 + t.tv_usec;
 fprintf(fp, "filter duration %u\n", (unsigned int)(time2-time));
 fclose(fp);
+*/
     }
 
     return ngx_http_next_header_filter(r);
