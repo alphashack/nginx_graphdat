@@ -10,32 +10,82 @@
 #include <errno.h>
 #include <msgpack.h>
 
-int sockfd = -1;
+static bool s_init = false;
+static char * s_sockfile = NULL;
+static int s_sockfd = -1;
+static bool s_lastwaserror = false;
 
-void socket_send(char * data, int len, FILE * fp) {
-	if(sockfd < 0)
+void socket_close() {
+debug("socket_close\n");
+	close(s_sockfd);
+	s_sockfd = -1;
+}
+
+void socket_term() {
+debug("socket_term\n");
+        if(s_init) {
+	    socket_close();
+	    free(s_sockfile);
+        }
+}
+
+bool socket_connect(ngx_log_t *log) {
+	if(s_sockfd < 0)
 	{
-		sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
-		if (sockfd < 0)
+debug("socket_connect\n");
+		s_sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
+		if (s_sockfd < 0)
 		{
-			fprintf(fp, "socketInit: opening socket (%s)\n", strerror(errno));
-			return;
+			if(!s_lastwaserror) {
+				ngx_log_error(NGX_LOG_ERR, log, 0, "nginx_graphdat error: could not create socket (%s)", strerror(s_sockfd));
+				s_lastwaserror = true;
+			}
+			return false;
 		}
-		fcntl(sockfd, F_SETFL, O_NONBLOCK);
+		fcntl(s_sockfd, F_SETFL, O_NONBLOCK);
 
 		struct sockaddr_un serv_addr;
 		int servlen;
 		bzero((char *) &serv_addr, sizeof(serv_addr));
 		serv_addr.sun_family = AF_UNIX;
-		strcpy(serv_addr.sun_path, "/tmp/gd.agent.sock");
+		strcpy(serv_addr.sun_path, s_sockfile);
 		servlen = sizeof(serv_addr.sun_family) + strlen(serv_addr.sun_path) + 1;
-		if(connect(sockfd, (struct sockaddr *)&serv_addr, servlen) < 0)
+		int result = connect(s_sockfd, (struct sockaddr *)&serv_addr, servlen);
+		if(result < 0)
 		{
-			fprintf(fp, "socketInit: binding socket (%s)\n", strerror(errno));
-			close(sockfd);
-			return;
+			if(!s_lastwaserror) {
+				ngx_log_error(NGX_LOG_ERR, log, 0, "nginx_graphdat error: could not connect socket (%s)", strerror(result));
+				s_lastwaserror = true;
+			}
+			socket_close();
+			return false;
 		}
 	}
+	return true;
+}
+
+bool socket_check(ngx_log_t *log) {
+	if(!s_init) {
+		if(!s_lastwaserror) {
+			ngx_log_error(NGX_LOG_ERR, log, 0, "nginx_graphdat error: not initialised");
+			s_lastwaserror = true;
+		}
+		return false;
+	}
+	return socket_connect(log);
+}
+
+void socket_init(ngx_str_t file, ngx_log_t *log) {
+debug("socket_init\n");
+	s_sockfile = malloc(file.len + 1);
+	memcpy(s_sockfile, file.data, file.len);
+	s_sockfile[file.len] = 0;
+	s_sockfd = -1;
+	s_init = true;
+}
+
+void socket_send(char * data, int len, ngx_log_t *log) {
+	if(!socket_check(log)) return;
 
 	unsigned char bytes[4];
 	bytes[0] = len >> 24;
@@ -43,38 +93,40 @@ void socket_send(char * data, int len, FILE * fp) {
 	bytes[2] = len >> 8;
 	bytes[3] = len;
 
-	int wrote = write(sockfd, bytes, 4);
+	int wrote = write(s_sockfd, bytes, 4);
 	if(wrote < 0)
 	{
-		fprintf(fp, "write error\n");
+		ngx_log_error(NGX_LOG_ERR, log, 0, "nginx_graphdat error: could not write socket (%s)", strerror(wrote));
+		socket_close();
 	}
-	else
+        else
 	{
-		fprintf(fp, "wrote: %d\n", wrote);
-	}
-	wrote = write(sockfd, data, len);
-	if(wrote < 0)
-	{
-		fprintf(fp, "write error\n");
-	}
-	else
-	{
-		fprintf(fp, "wrote: %d\n", wrote);
-	}
-
-	//close(sockfd);
+		wrote = write(s_sockfd, data, len);
+		if(wrote < 0)
+		{
+			ngx_log_error(NGX_LOG_ERR, log, 0, "nginx_graphdat error: could not write socket (%s)", strerror(wrote));
+			socket_close();
+		}
+		else
+		{
+			s_lastwaserror = false;
+		}
+        }
 }
 
-void graphdat_send(char* method, int methodlen, char* uri, int urilen, uintptr_t msec) {
-	FILE * fp;
-	fp = fopen("/tmp/nginx_graphdat.log", "a");
+void graphdat_init(ngx_str_t file, ngx_log_t *log) {
+	socket_init(file, log);
+}
 
-	fprintf(fp, "%.*s|%.*s|%d\n", methodlen, method, urilen, uri, (unsigned int)msec);
+void graphdat_term() {
+	socket_term();
+}
 
+void graphdat_send(char* method, int methodlen, char* uri, int urilen, uintptr_t msec, ngx_log_t *log) {
 	msgpack_sbuffer* buffer = msgpack_sbuffer_new();
         msgpack_packer* pk = msgpack_packer_new(buffer, msgpack_sbuffer_write);
 
-	msgpack_pack_map(pk, 4); // timestamp, type, route, responsetime
+	msgpack_pack_map(pk, 4); // timestamp, type, route, responsetime, source
 	// timestamp
 	msgpack_pack_raw(pk, 9);
         msgpack_pack_raw_body(pk, "timestamp", 9);
@@ -93,18 +145,15 @@ void graphdat_send(char* method, int methodlen, char* uri, int urilen, uintptr_t
 	msgpack_pack_raw(pk, 12);
         msgpack_pack_raw_body(pk, "responsetime", 12);
 	msgpack_pack_int(pk, msec);
+	// source
+	msgpack_pack_raw(pk, 6);
+        msgpack_pack_raw_body(pk, "source", 6);
+	msgpack_pack_raw(pk, 5);
+        msgpack_pack_raw_body(pk, "nginx", 5);
         
-	size_t i;
-	for(i=0;i<buffer->size;i++) {
-		fprintf(fp, "%d", buffer->data[i]);
-	}
-	fprintf(fp, "\n");
-
-	socket_send(buffer->data, buffer->size, fp);
+	socket_send(buffer->data, buffer->size, log);
 
 	msgpack_sbuffer_free(buffer);
         msgpack_packer_free(pk);
-
-	fclose(fp);
 }
 

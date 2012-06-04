@@ -4,24 +4,42 @@
 
 #include "graphdat.h"
 
+// remove:
+#include <stdio.h>
+#include <unistd.h>
+#include <stdlib.h>
+
 typedef struct {
     ngx_flag_t enable;
+    ngx_str_t socket_file;
 } ngx_http_graphdat_conf_t;
 
-static ngx_int_t ngx_http_graphdat_filter_init (ngx_conf_t*);
+static bool s_enabled = false;
+
+static ngx_int_t ngx_http_graphdat_filter_init(ngx_conf_t*);
 static ngx_int_t ngx_http_graphdat_header_filter(ngx_http_request_t*);
-static char * ngx_http_graphdat_merge_loc_conf(ngx_conf_t*, void*, void*);
-static void * ngx_http_graphdat_create_loc_conf(ngx_conf_t*);
+static char * ngx_http_graphdat_init_main_conf(ngx_conf_t*, void*);
+static void * ngx_http_graphdat_create_main_conf(ngx_conf_t*);
+static ngx_int_t ngx_http_graphdat_init_module(ngx_cycle_t*);
+static void ngx_http_graphdat_exit_master(ngx_cycle_t*);
 
 static ngx_http_output_header_filter_pt ngx_http_next_header_filter;
 
 static ngx_command_t ngx_http_graphdat_filter_commands[] = {
     {
         ngx_string("graphdat_filter"),
-        NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_HTTP_LIF_CONF|NGX_CONF_FLAG,
+        NGX_HTTP_MAIN_CONF|NGX_CONF_TAKE1|NGX_CONF_FLAG,
         ngx_conf_set_flag_slot,
-        NGX_HTTP_LOC_CONF_OFFSET,
+        NGX_HTTP_MAIN_CONF_OFFSET,
         offsetof(ngx_http_graphdat_conf_t, enable),
+        NULL
+    },
+    {
+        ngx_string("graphdat_socket_file"),
+        NGX_HTTP_MAIN_CONF|NGX_CONF_TAKE1,
+        ngx_conf_set_str_slot,
+        NGX_HTTP_MAIN_CONF_OFFSET,
+        offsetof(ngx_http_graphdat_conf_t, socket_file),
         NULL
     },
     ngx_null_command
@@ -31,14 +49,14 @@ static ngx_http_module_t ngx_http_graphdat_filter_ctx = {
     NULL,                                  /* preconfiguration */
     ngx_http_graphdat_filter_init,         /* postconfiguration */
 
-    NULL,                                  /* create main configuration */
-    NULL,                                  /* init main configuration */
+    ngx_http_graphdat_create_main_conf,    /* create main configuration */
+    ngx_http_graphdat_init_main_conf,      /* init main configuration */
 
     NULL,                                  /* create server configuration */
     NULL,                                  /* merge server configuration */
 
-    ngx_http_graphdat_create_loc_conf,     /* create location configuration */
-    ngx_http_graphdat_merge_loc_conf       /* merge location configuration */
+    NULL,                                  /* create location configuration */
+    NULL                                   /* merge location configuration */
 };
 
 ngx_module_t  ngx_http_graphdat_filter_module = {
@@ -47,18 +65,19 @@ ngx_module_t  ngx_http_graphdat_filter_module = {
     ngx_http_graphdat_filter_commands,     /* module directives */
     NGX_HTTP_MODULE,                       /* module type */
     NULL,                                  /* init master */
-    NULL,                                  /* init module */
+    ngx_http_graphdat_init_module,         /* init module */
     NULL,                                  /* init process */
     NULL,                                  /* init thread */
     NULL,                                  /* exit thread */
     NULL,                                  /* exit process */
-    NULL,                                  /* exit master */
+    ngx_http_graphdat_exit_master,         /* exit master */
     NGX_MODULE_V1_PADDING
 };
 
 static void *
-ngx_http_graphdat_create_loc_conf(ngx_conf_t *cf)
+ngx_http_graphdat_create_main_conf(ngx_conf_t *cf)
 {
+debug("ngx_http_graphdat_create_main_conf\n");
     ngx_http_graphdat_conf_t *conf;
 
     conf = ngx_pcalloc(cf->pool, sizeof(ngx_http_graphdat_conf_t));
@@ -72,41 +91,74 @@ ngx_http_graphdat_create_loc_conf(ngx_conf_t *cf)
 }
 
 static char *
-ngx_http_graphdat_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
+ngx_http_graphdat_init_main_conf(ngx_conf_t *cf, void *conf)
 {
-    ngx_http_graphdat_conf_t *prev = parent;
-    ngx_http_graphdat_conf_t *conf = child;
+debug("ngx_http_graphdat_init_main_conf\n");
+   ngx_http_graphdat_conf_t *config = conf;
 
-    ngx_conf_merge_value(conf->enable, prev->enable, 0);
+   ngx_conf_init_value(config->enable, 0);
+   if(config->socket_file.data == NULL) {
+	 ngx_str_set(&config->socket_file, "/tmp/gd.agent.sock");
+   }
 
-    return NGX_CONF_OK;
+   return NGX_CONF_OK;
 }
 
 static ngx_int_t
 ngx_http_graphdat_header_filter(ngx_http_request_t *r)
 {
-    struct timeval tv;
-    ngx_http_graphdat_conf_t *lrsl;
-    ngx_uint_t msec_diff;
-
-    lrsl = ngx_http_get_module_loc_conf(r, ngx_http_graphdat_filter_module);
-
-    if (lrsl->enable == 1)
+debug("filter\n");
+    if (s_enabled)
     {
-        ngx_gettimeofday(&tv);
-        msec_diff = (tv.tv_sec - r->start_sec) * 1000 + (tv.tv_usec / 1000) - r->start_msec + 123;
 
-        graphdat_send((char*)r->method_name.data, r->method_name.len, (char*)r->uri.data, r->uri.len, msec_diff);
+FILE * fp = fopen("/tmp/trace.log", "a");
+struct timeval t;
+ngx_gettimeofday(&t);
+ngx_uint_t time = t.tv_sec * 1000000 + t.tv_usec;
+
+	struct timeval tv;
+	ngx_uint_t msec_diff;
+
+	ngx_gettimeofday(&tv);
+	msec_diff = (tv.tv_sec - r->start_sec) * 1000 + (tv.tv_usec / 1000) - r->start_msec + 123;
+
+	graphdat_send((char*)r->method_name.data, r->method_name.len, (char*)r->uri.data, r->uri.len, msec_diff, r->connection->log);
+
+ngx_gettimeofday(&t);
+ngx_uint_t time2 = t.tv_sec * 1000000 + t.tv_usec;
+fprintf(fp, "filter duration %u\n", (unsigned int)(time2-time));
+fclose(fp);
     }
+
     return ngx_http_next_header_filter(r);
 }
 
 static ngx_int_t
-ngx_http_graphdat_filter_init (ngx_conf_t *cf)
+ngx_http_graphdat_filter_init (ngx_conf_t *conf)
 {
+debug("filter_init\n");
     ngx_http_next_header_filter = ngx_http_top_header_filter;
     ngx_http_top_header_filter = ngx_http_graphdat_header_filter;
 
     return NGX_OK;
+}
+
+static ngx_int_t ngx_http_graphdat_init_module(ngx_cycle_t* cycle) {
+debug("init_module\n");
+    ngx_http_graphdat_conf_t *conf;
+    conf = ngx_http_cycle_get_module_main_conf(cycle, ngx_http_graphdat_filter_module);
+    s_enabled = conf->enable;
+
+    if(s_enabled) {
+        graphdat_init(conf->socket_file, cycle->log);
+    }
+    return NGX_OK;
+}
+
+static void ngx_http_graphdat_exit_master(ngx_cycle_t* cycle) {
+debug("exit_master\n");
+    if(s_enabled) {
+        graphdat_term();
+    }
 }
 
