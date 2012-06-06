@@ -22,7 +22,7 @@ static list_t s_requests;
 static pthread_mutex_t s_mux = PTHREAD_MUTEX_INITIALIZER;
 static pthread_t s_thread;
 
-void graphdat_send(char* method, int methodlen, char* uri, int urilen, uintptr_t msec, ngx_log_t *log);
+void graphdat_send(char* method, int methodlen, char* uri, int urilen, double msec, ngx_log_t *log);
 
 void socket_close() {
 debug("socket_close\n");
@@ -174,9 +174,11 @@ void graphdat_term() {
 	socket_term();
 }
 
-void graphdat_send(char* method, int methodlen, char* uri, int urilen, uintptr_t msec, ngx_log_t *log) {
+void graphdat_send(char* method, int methodlen, char* uri, int urilen, double msec, ngx_log_t *log) {
 	msgpack_sbuffer* buffer = msgpack_sbuffer_new();
         msgpack_packer* pk = msgpack_packer_new(buffer, msgpack_sbuffer_write);
+
+debug("send time: %f\n", msec);
 
 	msgpack_pack_map(pk, 4); // timestamp, type, route, responsetime, source
 	// timestamp
@@ -196,7 +198,7 @@ void graphdat_send(char* method, int methodlen, char* uri, int urilen, uintptr_t
 	// responsetime
 	msgpack_pack_raw(pk, 12);
         msgpack_pack_raw_body(pk, "responsetime", 12);
-	msgpack_pack_int(pk, msec);
+	msgpack_pack_double(pk, msec);
 	// source
 	msgpack_pack_raw(pk, 6);
         msgpack_pack_raw_body(pk, "source", 6);
@@ -209,7 +211,7 @@ void graphdat_send(char* method, int methodlen, char* uri, int urilen, uintptr_t
         msgpack_packer_free(pk);
 }
 
-void graphdat_store(char* method, int methodlen, char* uri, int urilen, uintptr_t msec, ngx_log_t *log) {
+void graphdat_store(char* method, int methodlen, char* uri, int urilen, double msec, ngx_log_t *log) {
 	request_t *req = malloc(sizeof(request_t));
 	// method
 	req->method = malloc(methodlen);
