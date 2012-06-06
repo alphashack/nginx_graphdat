@@ -139,8 +139,6 @@ debug("socket_init\n");
 void socket_send(char * data, int len, ngx_log_t *log) {
 	if(!socket_check(log)) return;
 
-ngx_log_error(NGX_LOG_ERR, log, 0, "socket_send");
-
 	unsigned char bytes[4];
 	bytes[0] = len >> 24;
 	bytes[1] = len >> 16;
