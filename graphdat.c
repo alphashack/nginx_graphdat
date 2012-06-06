@@ -118,7 +118,7 @@ debug("worker\n");
 		}
 		else
 		{
-			sleep(1);
+			usleep(100000);
 		}
 	}
 debug("worker exiting\n");
@@ -178,7 +178,9 @@ void graphdat_send(char* method, int methodlen, char* uri, int urilen, double ms
 	msgpack_sbuffer* buffer = msgpack_sbuffer_new();
         msgpack_packer* pk = msgpack_packer_new(buffer, msgpack_sbuffer_write);
 
-debug("send time: %f\n", msec);
+struct timeval tv;
+ngx_gettimeofday(&tv);
+debugv("send time: %f at %u\n", msec, (unsigned int)tv.tv_sec);
 
 	msgpack_pack_map(pk, 4); // timestamp, type, route, responsetime, source
 	// timestamp

@@ -7,11 +7,12 @@
 #include <ngx_core.h>
 
 #define debug(...)
-/*{ \
+
+#define debugv(...) { \
 FILE * fp = fopen("/usr/local/nginx/logs/debug.log", "a"); \
 fprintf(fp, __VA_ARGS__); \
 fclose(fp); \
-}*/
+}
 
 typedef struct {
 	char* method;
