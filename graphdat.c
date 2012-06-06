@@ -178,9 +178,7 @@ void graphdat_send(char* method, int methodlen, char* uri, int urilen, double ms
 	msgpack_sbuffer* buffer = msgpack_sbuffer_new();
         msgpack_packer* pk = msgpack_packer_new(buffer, msgpack_sbuffer_write);
 
-struct timeval tv;
-ngx_gettimeofday(&tv);
-debugv("send time: %f at %u\n", msec, (unsigned int)tv.tv_sec);
+debugv("nginx req time: %f\n", msec);
 
 	msgpack_pack_map(pk, 4); // timestamp, type, route, responsetime, source
 	// timestamp
