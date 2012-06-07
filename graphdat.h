@@ -6,18 +6,6 @@
 
 #include <ngx_core.h>
 
-#define debug(...)
-
-#define debugv(...) { \
-FILE * fp = fopen("/usr/local/nginx/logs/debug.log", "a"); \
-struct timeval tv; \
-gettimeofday(&tv, NULL); \
-fprintf(fp, "%u :: ", (unsigned int)tv.tv_sec); \
-fprintf(fp, __VA_ARGS__); \
-fclose(fp); \
-}
-
-
 typedef struct {
 	char* method;
 	int methodlen;
