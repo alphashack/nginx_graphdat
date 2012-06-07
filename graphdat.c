@@ -25,7 +25,6 @@ static pthread_t s_thread;
 void graphdat_send(char* method, int methodlen, char* uri, int urilen, double msec, ngx_log_t *log);
 
 void socket_close() {
-debug("socket_close\n");
 	close(s_sockfd);
 	s_sockfd = -1;
 }
@@ -38,13 +37,11 @@ void del_request(request_t * req) {
 }
 
 void dlg_del_request(void * item) {
-debug("dellist\n");
 	request_t * req = (request_t *)item;
 	del_request(req);
 }
 
 void socket_term() {
-debug("socket_term\n");
         if(s_init) {
             s_running = false;
             pthread_join(s_thread, NULL);
@@ -57,7 +54,6 @@ debug("socket_term\n");
 bool socket_connect(ngx_log_t *log) {
 	if(s_sockfd < 0)
 	{
-debug("socket_connect\n");
 		s_sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
 		if (s_sockfd < 0)
 		{
@@ -106,8 +102,6 @@ void* worker(
 	request_t *req;
 
 	while(s_running) {
-debug("worker\n");
-		// background thread:
 		pthread_mutex_lock(&s_mux);
 		req = listRemoveFront(s_requests);
 		pthread_mutex_unlock(&s_mux);
@@ -121,12 +115,10 @@ debug("worker\n");
 			usleep(100000);
 		}
 	}
-debug("worker exiting\n");
 	return NULL;
 }
 
 void socket_init(ngx_str_t file, ngx_log_t *log) {
-debug("socket_init\n");
 	s_sockfile = malloc(file.len + 1);
 	memcpy(s_sockfile, file.data, file.len);
 	s_sockfile[file.len] = 0;
@@ -178,10 +170,6 @@ void graphdat_send(char* method, int methodlen, char* uri, int urilen, double ms
 	msgpack_sbuffer* buffer = msgpack_sbuffer_new();
         msgpack_packer* pk = msgpack_packer_new(buffer, msgpack_sbuffer_write);
 
-struct timeval tv;
-ngx_gettimeofday(&tv);
-debugv("send time: %f at %u\n", msec, (unsigned int)tv.tv_sec);
-
 	msgpack_pack_map(pk, 4); // timestamp, type, route, responsetime, source
 	// timestamp
 	msgpack_pack_raw(pk, 9);
@@ -232,8 +220,5 @@ void graphdat_store(char* method, int methodlen, char* uri, int urilen, double m
 	pthread_mutex_lock(&s_mux);
 	listAppendBack(s_requests, req);
 	pthread_mutex_unlock(&s_mux);
-
-debug("list len %d\n", listCount(s_requests));
 }
-
 
