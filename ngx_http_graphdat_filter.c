@@ -102,6 +102,25 @@ ngx_http_graphdat_init_main_conf(ngx_conf_t *cf, void *conf)
    return NGX_CONF_OK;
 }
 
+void delegate_logger(void * user, const char * fmt, ...)
+{
+	va_list argp;
+	va_start(argp, fmt);
+	ngx_log_t * log = user;
+	
+	// All this because nginx does not always define a legger with a va_list param
+	char *msg = "";
+	int res = vasprintf(&msg, fmt, argp);
+
+	if(res >= 0)
+	{
+		ngx_log_error_core(NGX_LOG_ERR, log, 0, msg);
+		free(msg);
+	}
+
+	va_end(argp);
+}
+
 static ngx_int_t
 ngx_http_graphdat_header_filter(ngx_http_request_t *r)
 {
@@ -113,7 +132,7 @@ ngx_http_graphdat_header_filter(ngx_http_request_t *r)
 	ngx_gettimeofday(&tv);
 	msec_diff = (tv.tv_sec - r->start_sec) * 1000 + (tv.tv_usec / 1000) - r->start_msec;
 
-	graphdat_store((char*)r->method_name.data, r->method_name.len, (char*)r->uri.data, r->uri.len, msec_diff, r->connection->log);
+	graphdat_store((char*)r->method_name.data, r->method_name.len, (char*)r->uri.data, r->uri.len, msec_diff, delegate_logger, r->connection->log, sizeof(ngx_log_t));
     }
 
     return ngx_http_next_header_filter(r);
@@ -134,7 +153,7 @@ static ngx_int_t ngx_http_graphdat_init_process(ngx_cycle_t* cycle) {
     s_enabled = conf->enable;
 
     if(s_enabled) {
-        graphdat_init(conf->socket_file, cycle->log);
+        graphdat_init((char *)conf->socket_file.data, conf->socket_file.len, delegate_logger, cycle->log);
     }
     return NGX_OK;
 }

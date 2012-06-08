@@ -22,7 +22,7 @@ static list_t s_requests;
 static pthread_mutex_t s_mux = PTHREAD_MUTEX_INITIALIZER;
 static pthread_t s_thread;
 
-void graphdat_send(char* method, int methodlen, char* uri, int urilen, double msec, ngx_log_t *log);
+void graphdat_send(char* method, int methodlen, char* uri, int urilen, double msec, logger_delegate_t logger, void * log_context);
 
 void socket_close() {
 	close(s_sockfd);
@@ -30,7 +30,7 @@ void socket_close() {
 }
 
 void del_request(request_t * req) {
-	free(req->log);
+	free(req->log_context);
 	free(req->uri);
 	free(req->method);
 	free(req);	
@@ -51,14 +51,14 @@ void socket_term() {
         }
 }
 
-bool socket_connect(ngx_log_t *log) {
+bool socket_connect(logger_delegate_t logger, void * log_context) {
 	if(s_sockfd < 0)
 	{
 		s_sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
 		if (s_sockfd < 0)
 		{
 			if(!s_lastwaserror) {
-				ngx_log_error(NGX_LOG_ERR, log, 0, "nginx_graphdat error: could not create socket (%s)", strerror(s_sockfd));
+				logger(log_context, "nginx_graphdat error: could not create socket (%s)", strerror(s_sockfd));
 				s_lastwaserror = true;
 			}
 			return false;
@@ -75,7 +75,7 @@ bool socket_connect(ngx_log_t *log) {
 		if(result < 0)
 		{
 			if(!s_lastwaserror) {
-				ngx_log_error(NGX_LOG_ERR, log, 0, "nginx_graphdat error: could not connect socket (%s)", strerror(result));
+				logger(log_context, "nginx_graphdat error: could not connect socket (%s)", strerror(result));
 				s_lastwaserror = true;
 			}
 			socket_close();
@@ -85,19 +85,18 @@ bool socket_connect(ngx_log_t *log) {
 	return true;
 }
 
-bool socket_check(ngx_log_t *log) {
+bool socket_check(logger_delegate_t logger, void * log_context) {
 	if(!s_init) {
 		if(!s_lastwaserror) {
-			ngx_log_error(NGX_LOG_ERR, log, 0, "nginx_graphdat error: not initialised");
+			logger(log_context, "nginx_graphdat error: not initialised");
 			s_lastwaserror = true;
 		}
 		return false;
 	}
-	return socket_connect(log);
+	return socket_connect(logger, log_context);
 }
 
-void* worker(
-	void* arg)
+void* worker(void* arg)
 {
 	request_t *req;
 
@@ -107,29 +106,29 @@ void* worker(
 		pthread_mutex_unlock(&s_mux);
 
 		if(req != NULL) {
-			graphdat_send(req->method, req->methodlen, req->uri, req->urilen, req->msec, req->log);
+			graphdat_send(req->method, req->methodlen, req->uri, req->urilen, req->msec, req->logger, req->log_context);
 			del_request(req);
 		}
 		else
 		{
-			usleep(100000);
+			usleep(100000); // 100ms
 		}
 	}
 	return NULL;
 }
 
-void socket_init(ngx_str_t file, ngx_log_t *log) {
-	s_sockfile = malloc(file.len + 1);
-	memcpy(s_sockfile, file.data, file.len);
-	s_sockfile[file.len] = 0;
+void socket_init(char * file, int filelen, logger_delegate_t logger, void * log_context) {
+	s_sockfile = malloc(filelen + 1);
+	memcpy(s_sockfile, file, filelen);
+	s_sockfile[filelen] = 0;
 	s_sockfd = -1;
 	s_requests = listNew();
 	pthread_create(&s_thread, NULL, worker, NULL);
 	s_init = true;
 }
 
-void socket_send(char * data, int len, ngx_log_t *log) {
-	if(!socket_check(log)) return;
+void socket_send(char * data, int len, logger_delegate_t logger, void * log_context) {
+	if(!socket_check(logger, log_context)) return;
 
 	unsigned char bytes[4];
 	bytes[0] = len >> 24;
@@ -140,7 +139,7 @@ void socket_send(char * data, int len, ngx_log_t *log) {
 	int wrote = write(s_sockfd, bytes, 4);
 	if(wrote < 0)
 	{
-		ngx_log_error(NGX_LOG_ERR, log, 0, "nginx_graphdat error: could not write socket (%s)", strerror(wrote));
+		logger(log_context, "nginx_graphdat error: could not write socket (%s)", strerror(wrote));
 		socket_close();
 	}
         else
@@ -148,7 +147,7 @@ void socket_send(char * data, int len, ngx_log_t *log) {
 		wrote = write(s_sockfd, data, len);
 		if(wrote < 0)
 		{
-			ngx_log_error(NGX_LOG_ERR, log, 0, "nginx_graphdat error: could not write socket (%s)", strerror(wrote));
+			logger(log_context, "nginx_graphdat error: could not write socket (%s)", strerror(wrote));
 			socket_close();
 		}
 		else
@@ -158,15 +157,15 @@ void socket_send(char * data, int len, ngx_log_t *log) {
         }
 }
 
-void graphdat_init(ngx_str_t file, ngx_log_t *log) {
-	socket_init(file, log);
+void graphdat_init(char * file, int filelen, logger_delegate_t logger, void * log_context) {
+	socket_init(file, filelen, logger, log_context);
 }
 
 void graphdat_term() {
 	socket_term();
 }
 
-void graphdat_send(char* method, int methodlen, char* uri, int urilen, double msec, ngx_log_t *log) {
+void graphdat_send(char* method, int methodlen, char* uri, int urilen, double msec, logger_delegate_t logger, void * log_context) {
 	msgpack_sbuffer* buffer = msgpack_sbuffer_new();
         msgpack_packer* pk = msgpack_packer_new(buffer, msgpack_sbuffer_write);
 
@@ -195,13 +194,13 @@ void graphdat_send(char* method, int methodlen, char* uri, int urilen, double ms
 	msgpack_pack_raw(pk, 5);
         msgpack_pack_raw_body(pk, "nginx", 5);
         
-	socket_send(buffer->data, buffer->size, log);
+	socket_send(buffer->data, buffer->size, logger, log_context);
 
 	msgpack_sbuffer_free(buffer);
         msgpack_packer_free(pk);
 }
 
-void graphdat_store(char* method, int methodlen, char* uri, int urilen, double msec, ngx_log_t *log) {
+void graphdat_store(char* method, int methodlen, char* uri, int urilen, double msec, logger_delegate_t logger, void * log_context, int log_context_len) {
 	request_t *req = malloc(sizeof(request_t));
 	// method
 	req->method = malloc(methodlen);
@@ -214,8 +213,9 @@ void graphdat_store(char* method, int methodlen, char* uri, int urilen, double m
 	// msec
 	req->msec = msec;
 	// log
-	req->log = malloc(sizeof(ngx_log_t));
-	memcpy(req->log, log, sizeof(ngx_log_t));
+	req->logger = logger;
+	req->log_context = malloc(log_context_len);
+	memcpy(req->log_context, log_context, log_context_len);
 
 	pthread_mutex_lock(&s_mux);
 	listAppendBack(s_requests, req);

@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include <ngx_core.h>
+typedef void (*logger_delegate_t)(void * user, const char * fmt, ...);
 
 typedef struct {
 	char* method;
@@ -12,12 +12,13 @@ typedef struct {
 	char* uri;
 	int urilen;
 	double msec;
-	ngx_log_t *log;
+	logger_delegate_t logger;
+	void * log_context;
 } request_t;
 
-void graphdat_init(ngx_str_t,ngx_log_t*);
+void graphdat_init(char *, int, logger_delegate_t, void *);
 void graphdat_term();
-void graphdat_store(char*,int,char*,int,double,ngx_log_t*);
+void graphdat_store(char *, int, char *, int, double, logger_delegate_t, void *, int);
 
 #endif /* GRAPHDAT_H */
 
