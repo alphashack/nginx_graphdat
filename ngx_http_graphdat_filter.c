@@ -153,7 +153,7 @@ static ngx_int_t ngx_http_graphdat_init_process(ngx_cycle_t* cycle) {
     s_enabled = conf->enable;
 
     if(s_enabled) {
-        graphdat_init((char *)conf->socket_file.data, conf->socket_file.len, delegate_logger, cycle->log);
+        graphdat_init((char *)conf->socket_file.data, conf->socket_file.len, "nginx", 5, delegate_logger, cycle->log);
     }
     return NGX_OK;
 }

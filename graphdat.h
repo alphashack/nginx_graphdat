@@ -16,9 +16,9 @@ typedef struct {
 	void * log_context;
 } request_t;
 
-void graphdat_init(char *, int, logger_delegate_t, void *);
+void graphdat_init(char * file, int filelen, char* source, int sourcelen, logger_delegate_t logger, void * log_context);
 void graphdat_term();
-void graphdat_store(char *, int, char *, int, double, logger_delegate_t, void *, int);
+void graphdat_store(char* method, int methodlen, char* uri, int urilen, double msec, logger_delegate_t logger, void * log_context, int log_context_len);
 
 #endif /* GRAPHDAT_H */
 

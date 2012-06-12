@@ -15,6 +15,8 @@
 static bool s_init = false;
 static bool s_running = true;
 static char * s_sockfile = NULL;
+static char * s_source = NULL;
+static int s_sourcelen;
 static int s_sockfd = -1;
 static bool s_lastwaserror = false;
 static list_t s_requests;
@@ -47,6 +49,7 @@ void socket_term() {
             pthread_join(s_thread, NULL);
 	    socket_close();
 	    free(s_sockfile);
+	    free(s_source);
             listDel(s_requests, dlg_del_request);
         }
 }
@@ -58,7 +61,7 @@ bool socket_connect(logger_delegate_t logger, void * log_context) {
 		if (s_sockfd < 0)
 		{
 			if(!s_lastwaserror) {
-				logger(log_context, "nginx_graphdat error: could not create socket (%s)", strerror(s_sockfd));
+				logger(log_context, "graphdat error: could not create socket (%s)", strerror(s_sockfd));
 				s_lastwaserror = true;
 			}
 			return false;
@@ -75,7 +78,7 @@ bool socket_connect(logger_delegate_t logger, void * log_context) {
 		if(result < 0)
 		{
 			if(!s_lastwaserror) {
-				logger(log_context, "nginx_graphdat error: could not connect socket (%s)", strerror(result));
+				logger(log_context, "graphdat error: could not connect socket (%s)", strerror(result));
 				s_lastwaserror = true;
 			}
 			socket_close();
@@ -88,7 +91,7 @@ bool socket_connect(logger_delegate_t logger, void * log_context) {
 bool socket_check(logger_delegate_t logger, void * log_context) {
 	if(!s_init) {
 		if(!s_lastwaserror) {
-			logger(log_context, "nginx_graphdat error: not initialised");
+			logger(log_context, "graphdat error: not initialised");
 			s_lastwaserror = true;
 		}
 		return false;
@@ -117,11 +120,15 @@ void* worker(void* arg)
 	return NULL;
 }
 
-void socket_init(char * file, int filelen, logger_delegate_t logger, void * log_context) {
+void socket_init(char * file, int filelen, char* source, int sourcelen, logger_delegate_t logger, void * log_context) {
 	s_sockfile = malloc(filelen + 1);
 	memcpy(s_sockfile, file, filelen);
 	s_sockfile[filelen] = 0;
 	s_sockfd = -1;
+	s_source = malloc(sourcelen + 1);
+	s_sourcelen = sourcelen;
+	memcpy(s_source, source, sourcelen);
+	s_source[sourcelen] = 0;
 	s_requests = listNew();
 	pthread_create(&s_thread, NULL, worker, NULL);
 	s_init = true;
@@ -139,7 +146,7 @@ void socket_send(char * data, int len, logger_delegate_t logger, void * log_cont
 	int wrote = write(s_sockfd, bytes, 4);
 	if(wrote < 0)
 	{
-		logger(log_context, "nginx_graphdat error: could not write socket (%s)", strerror(wrote));
+		logger(log_context, "graphdat error: could not write socket (%s)", strerror(wrote));
 		socket_close();
 	}
         else
@@ -147,7 +154,7 @@ void socket_send(char * data, int len, logger_delegate_t logger, void * log_cont
 		wrote = write(s_sockfd, data, len);
 		if(wrote < 0)
 		{
-			logger(log_context, "nginx_graphdat error: could not write socket (%s)", strerror(wrote));
+			logger(log_context, "graphdat error: could not write socket (%s)", strerror(wrote));
 			socket_close();
 		}
 		else
@@ -157,8 +164,8 @@ void socket_send(char * data, int len, logger_delegate_t logger, void * log_cont
         }
 }
 
-void graphdat_init(char * file, int filelen, logger_delegate_t logger, void * log_context) {
-	socket_init(file, filelen, logger, log_context);
+void graphdat_init(char * file, int filelen, char* source, int sourcelen, logger_delegate_t logger, void * log_context) {
+	socket_init(file, filelen, source, sourcelen, logger, log_context);
 }
 
 void graphdat_term() {
@@ -192,7 +199,7 @@ void graphdat_send(char* method, int methodlen, char* uri, int urilen, double ms
 	msgpack_pack_raw(pk, 6);
         msgpack_pack_raw_body(pk, "source", 6);
 	msgpack_pack_raw(pk, 5);
-        msgpack_pack_raw_body(pk, "nginx", 5);
+        msgpack_pack_raw_body(pk, s_source, s_sourcelen);
         
 	socket_send(buffer->data, buffer->size, logger, log_context);
 
