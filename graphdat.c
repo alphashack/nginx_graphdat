@@ -11,6 +11,7 @@
 #include <errno.h>
 #include <msgpack.h>
 #include <pthread.h>
+#include <netinet/in.h>
 
 static bool s_init = false;
 static bool s_running = true;
@@ -137,7 +138,9 @@ void socket_init(char * file, int filelen, char* source, int sourcelen, logger_d
 void socket_send(char * data, int len, logger_delegate_t logger, void * log_context) {
 	if(!socket_check(logger, log_context)) return;
 
-	int wrote = write(s_sockfd, hton(len), sizeof(len));
+	int nlen = htonl(len);
+
+	int wrote = write(s_sockfd, &nlen, sizeof(nlen));
 	if(wrote < 0)
 	{
 		logger(log_context, "graphdat error: could not write socket (%s)", strerror(wrote));
