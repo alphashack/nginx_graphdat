@@ -13,6 +13,11 @@
 #include <pthread.h>
 #include <netinet/in.h>
 
+#ifndef GRAPHDAT_WORKER_LOOP_SLEEP
+// GRAPHDAT_WORKER_LOOP_SLEEP usec
+#define GRAPHDAT_WORKER_LOOP_SLEEP 100000
+#endif
+
 static bool s_init = false;
 static bool s_running = true;
 static char * s_sockfile = NULL;
@@ -44,7 +49,7 @@ void dlg_del_request(void * item) {
 	del_request(req);
 }
 
-void socket_term() {
+void socket_term(logger_delegate_t logger, void * log_context) {
         if(s_init) {
             s_running = false;
             pthread_join(s_thread, NULL);
@@ -115,7 +120,7 @@ void* worker(void* arg)
 		}
 		else
 		{
-			usleep(100000); // 100ms
+			usleep(GRAPHDAT_WORKER_LOOP_SLEEP);
 		}
 	}
 	return NULL;
@@ -156,6 +161,7 @@ void socket_send(char * data, int len, logger_delegate_t logger, void * log_cont
 		}
 		else
 		{
+			//logger(log_context, "socket_send (%d bytes)", wrote);
 			s_lastwaserror = false;
 		}
         }
@@ -165,8 +171,8 @@ void graphdat_init(char * file, int filelen, char* source, int sourcelen, logger
 	socket_init(file, filelen, source, sourcelen, logger, log_context);
 }
 
-void graphdat_term() {
-	socket_term();
+void graphdat_term(logger_delegate_t logger, void * log_context) {
+	socket_term(logger, log_context);
 }
 
 void graphdat_send(char* method, int methodlen, char* uri, int urilen, double msec, logger_delegate_t logger, void * log_context) {
@@ -218,8 +224,15 @@ void graphdat_store(char* method, int methodlen, char* uri, int urilen, double m
 	req->msec = msec;
 	// log
 	req->logger = logger;
-	req->log_context = malloc(log_context_len);
-	memcpy(req->log_context, log_context, log_context_len);
+	if(log_context != NULL)
+	{
+		req->log_context = malloc(log_context_len);
+		memcpy(req->log_context, log_context, log_context_len);
+	}
+	else
+	{
+		req->log_context = NULL;
+	}
 
 	pthread_mutex_lock(&s_mux);
 	listAppendBack(s_requests, req);
