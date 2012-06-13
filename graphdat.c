@@ -137,13 +137,7 @@ void socket_init(char * file, int filelen, char* source, int sourcelen, logger_d
 void socket_send(char * data, int len, logger_delegate_t logger, void * log_context) {
 	if(!socket_check(logger, log_context)) return;
 
-	unsigned char bytes[4];
-	bytes[0] = len >> 24;
-	bytes[1] = len >> 16;
-	bytes[2] = len >> 8;
-	bytes[3] = len;
-
-	int wrote = write(s_sockfd, bytes, 4);
+	int wrote = write(s_sockfd, hton(len), sizeof(len));
 	if(wrote < 0)
 	{
 		logger(log_context, "graphdat error: could not write socket (%s)", strerror(wrote));
