@@ -2,7 +2,7 @@
 #include <ngx_core.h>
 #include <ngx_http.h>
 
-#include "graphdat.h"
+#include "lib/module_graphdat/graphdat.h"
 
 #ifndef HTTP_GRAPHDAT_DEFAULT_SOCKET_FILE
 #define HTTP_GRAPHDAT_DEFAULT_SOCKET_FILE "/tmp/gd.agent.sock"
