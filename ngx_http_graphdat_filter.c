@@ -130,12 +130,13 @@ ngx_http_graphdat_header_filter(ngx_http_request_t *r)
     if (s_enabled)
     {
 	struct timeval tv;
-	double msec_diff;
-
 	ngx_gettimeofday(&tv);
-	msec_diff = (tv.tv_sec - r->start_sec) * 1000 + (tv.tv_usec / 1000) - r->start_msec;
+	// resolution of request timer is msec
+	int now_msec = tv.tv_sec * 1000 + (tv.tv_usec / 1000);
+	int start_msec = r->start_sec * 1000 + r->start_msec;
+	double diff_msec =  now_msec - start_msec;
 
-	graphdat_store((char*)r->method_name.data, r->method_name.len, (char*)r->uri.data, r->uri.len, msec_diff, delegate_logger, r->connection->log, sizeof(ngx_log_t));
+	graphdat_store((char*)r->method_name.data, r->method_name.len, (char*)r->uri.data, r->uri.len, diff_msec, delegate_logger, r->connection->log, sizeof(ngx_log_t));
     }
 
     return ngx_http_next_header_filter(r);
