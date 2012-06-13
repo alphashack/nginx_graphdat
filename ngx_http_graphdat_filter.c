@@ -2,12 +2,15 @@
 #include <ngx_core.h>
 #include <ngx_http.h>
 
-#include "graphdat.h"
+#include "lib/module_graphdat/graphdat.h"
 
-// remove:
-#include <stdio.h>
-#include <unistd.h>
-#include <stdlib.h>
+#ifndef HTTP_GRAPHDAT_DEFAULT_SOCKET_FILE
+#define HTTP_GRAPHDAT_DEFAULT_SOCKET_FILE "/tmp/gd.agent.sock"
+#endif
+
+#ifndef HTTP_GRAPHDAT_SOURCE
+#define HTTP_GRAPHDAT_SOURCE "nginx"
+#endif
 
 typedef struct {
     ngx_flag_t enable;
@@ -27,7 +30,7 @@ static ngx_http_output_header_filter_pt ngx_http_next_header_filter;
 
 static ngx_command_t ngx_http_graphdat_filter_commands[] = {
     {
-        ngx_string("graphdat_filter"),
+        ngx_string("graphdat"),
         NGX_HTTP_MAIN_CONF|NGX_CONF_TAKE1|NGX_CONF_FLAG,
         ngx_conf_set_flag_slot,
         NGX_HTTP_MAIN_CONF_OFFSET,
@@ -96,10 +99,29 @@ ngx_http_graphdat_init_main_conf(ngx_conf_t *cf, void *conf)
 
    ngx_conf_init_value(config->enable, 0);
    if(config->socket_file.data == NULL) {
-	 ngx_str_set(&config->socket_file, "/tmp/gd.agent.sock");
+	 ngx_str_set(&config->socket_file, HTTP_GRAPHDAT_DEFAULT_SOCKET_FILE);
    }
 
    return NGX_CONF_OK;
+}
+
+void delegate_logger(void * user, const char * fmt, ...)
+{
+	va_list argp;
+	va_start(argp, fmt);
+	ngx_log_t * log = user;
+	
+	// All this because nginx does not always define a logger with a va_list param
+	char *msg = "";
+	int res = vasprintf(&msg, fmt, argp);
+
+	if(res >= 0)
+	{
+		ngx_log_error_core(NGX_LOG_ERR, log, 0, msg);
+		free(msg);
+	}
+
+	va_end(argp);
 }
 
 static ngx_int_t
@@ -108,12 +130,13 @@ ngx_http_graphdat_header_filter(ngx_http_request_t *r)
     if (s_enabled)
     {
 	struct timeval tv;
-	double msec_diff;
-
 	ngx_gettimeofday(&tv);
-	msec_diff = (tv.tv_sec - r->start_sec) * 1000 + (tv.tv_usec / 1000) - r->start_msec;
+	// resolution of request timer is msec
+	int now_msec = tv.tv_sec * 1000 + (tv.tv_usec / 1000);
+	int start_msec = r->start_sec * 1000 + r->start_msec;
+	double diff_msec =  now_msec - start_msec;
 
-	graphdat_store((char*)r->method_name.data, r->method_name.len, (char*)r->uri.data, r->uri.len, msec_diff, r->connection->log);
+	graphdat_store((char*)r->method_name.data, r->method_name.len, (char*)r->uri.data, r->uri.len, diff_msec, delegate_logger, r->connection->log, sizeof(ngx_log_t));
     }
 
     return ngx_http_next_header_filter(r);
@@ -134,14 +157,14 @@ static ngx_int_t ngx_http_graphdat_init_process(ngx_cycle_t* cycle) {
     s_enabled = conf->enable;
 
     if(s_enabled) {
-        graphdat_init(conf->socket_file, cycle->log);
+        graphdat_init((char *)conf->socket_file.data, conf->socket_file.len, HTTP_GRAPHDAT_SOURCE, strlen(HTTP_GRAPHDAT_SOURCE), delegate_logger, cycle->log);
     }
     return NGX_OK;
 }
 
 static void ngx_http_graphdat_exit_process(ngx_cycle_t* cycle) {
     if(s_enabled) {
-        graphdat_term();
+        graphdat_term(delegate_logger, cycle->log);
     }
 }
 
