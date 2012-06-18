@@ -8,5 +8,5 @@ $ngx_addon_dir/lib/module_graphdat/msgpack/src/version.c
 $ngx_addon_dir/lib/module_graphdat/msgpack/src/vrefbuffer.c 
 $ngx_addon_dir/lib/module_graphdat/msgpack/src/zone.c 
 $ngx_addon_dir/lib/module_graphdat/graphdat.c $ngx_addon_dir/ngx_http_graphdat_filter.c"
-CFLAGS="-I $ngx_addon_dir/lib/module_graphdat/os/ -I $ngx_addon_dir/lib/module_graphdat/os/linux/ $CFLAGS"
+CFLAGS="-I $ngx_addon_dir/lib/module_graphdat/os -I $ngx_addon_dir/lib/module_graphdat/os/linux -I $ngx_addon_dir/lib/module_graphdat/msgpack/src -I $ngx_addon_dir/lib/module_graphdat/msgpack/src/msgpack -Wno-missing-field-initializers $CFLAGS"
 
