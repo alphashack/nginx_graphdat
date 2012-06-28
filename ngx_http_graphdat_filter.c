@@ -105,7 +105,7 @@ ngx_http_graphdat_init_main_conf(ngx_conf_t *cf, void *conf)
    return NGX_CONF_OK;
 }
 
-void delegate_logger(void * user, const char * fmt, ...)
+void delegate_logger(graphdat_log_t type, void * user, const char * fmt, ...)
 {
 	va_list argp;
 	va_start(argp, fmt);
