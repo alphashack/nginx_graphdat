@@ -6,9 +6,8 @@ graphdat nginx module
 this project uses a submodule for common module functionality
 after cloning this repo you will need to:
 
-git submodule init
-
-git submodule update
+- git submodule init
+- git submodule update
 
 configure nginx adding the module to your standard configure command
 --add-module=../src/nginx/nginx_graphdat/
@@ -16,7 +15,6 @@ configure nginx adding the module to your standard configure command
 
 compile and install nginx
 
-make
-
-sudo make install
+- make
+-sudo make install
 
