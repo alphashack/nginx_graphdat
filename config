@@ -1,12 +1,24 @@
 ngx_addon_name=ngx_http_graphdat_filter_module
+
 HTTP_FILTER_MODULES="$HTTP_FILTER_MODULES ngx_http_graphdat_filter_module"
-NGX_ADDON_DEPS="$NGX_ADDON_DEPS $ngx_addon_dir/lib/module_graphdat/os/thread.h $ngx_addon_dir/lib/module_graphdat/os/mutex.h $ngx_addon_dir/lib/module_graphdat/os/socket.h $ngx_addon_dir/lib/module_graphdat/os/linux/os.h $ngx_addon_dir/lib/module_graphdat/list.h $ngx_addon_dir/lib/module_graphdat/graphdat.h"
-NGX_ADDON_SRCS="$NGX_ADDON_SRCS $ngx_addon_dir/lib/module_graphdat/list.c $ngx_addon_dir/lib/module_graphdat/os/linux/thread.c  $ngx_addon_dir/lib/module_graphdat/os/linux/mutex.c $ngx_addon_dir/lib/module_graphdat/os/linux/socket.c 
+
+NGX_ADDON_DEPS="$NGX_ADDON_DEPS $ngx_addon_dir/lib/module_graphdat/os/thread.h $ngx_addon_dir/lib/module_graphdat/os/timehelper.h $ngx_addon_dir/lib/module_graphdat/os/mutex.h $ngx_addon_dir/lib/module_graphdat/os/socket.h $ngx_addon_dir/lib/module_graphdat/os/linux/os.h $ngx_addon_dir/lib/module_graphdat/list.h $ngx_addon_dir/lib/module_graphdat/graphdat.h"
+
+NGX_ADDON_SRCS="$NGX_ADDON_SRCS 
+$ngx_addon_dir/lib/module_graphdat/list.c 
+$ngx_addon_dir/lib/module_graphdat/os/linux/thread.c  
+$ngx_addon_dir/lib/module_graphdat/os/linux/mutex.c 
+$ngx_addon_dir/lib/module_graphdat/os/linux/socket.c 
+$ngx_addon_dir/lib/module_graphdat/os/linux/timehelper.c 
 $ngx_addon_dir/lib/module_graphdat/msgpack/src/objectc.c 
 $ngx_addon_dir/lib/module_graphdat/msgpack/src/unpack.c 
 $ngx_addon_dir/lib/module_graphdat/msgpack/src/version.c 
 $ngx_addon_dir/lib/module_graphdat/msgpack/src/vrefbuffer.c 
 $ngx_addon_dir/lib/module_graphdat/msgpack/src/zone.c 
-$ngx_addon_dir/lib/module_graphdat/graphdat.c $ngx_addon_dir/ngx_http_graphdat_filter.c"
+$ngx_addon_dir/lib/module_graphdat/graphdat.c 
+$ngx_addon_dir/ngx_http_graphdat_filter.c"
+
 CFLAGS="-I $ngx_addon_dir/lib/module_graphdat/os -I $ngx_addon_dir/lib/module_graphdat/os/linux -I $ngx_addon_dir/lib/module_graphdat/msgpack/src -I $ngx_addon_dir/lib/module_graphdat/msgpack/src/msgpack -Wno-missing-field-initializers $CFLAGS"
+
+CORE_LIBS="-lrt $CORE_LIBS"
 
