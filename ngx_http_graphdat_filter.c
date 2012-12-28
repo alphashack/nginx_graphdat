@@ -110,7 +110,7 @@ void delegate_logger(graphdat_log_t type, void * user, const char * fmt, ...)
 	va_list argp;
 	va_start(argp, fmt);
 	ngx_log_t * log = user;
-	
+
 	// All this because nginx does not always define a logger with a va_list param
 	char *msg = "";
 	int res = vasprintf(&msg, fmt, argp);
@@ -136,7 +136,7 @@ ngx_http_graphdat_header_filter(ngx_http_request_t *r)
 	int start_msec = r->start_sec * 1000 + r->start_msec;
 	double diff_msec =  now_msec - start_msec;
 
-	graphdat_store((char*)r->method_name.data, r->method_name.len, (char*)r->uri.data, r->uri.len, diff_msec, delegate_logger, r->connection->log, sizeof(ngx_log_t));
+	graphdat_store((char*)r->method_name.data, r->method_name.len, (char*)r->uri.data, r->uri.len, (char*)r->headers_in.server.data, r->headers_in.server.len, diff_msec, delegate_logger, r->connection->log, sizeof(ngx_log_t));
     }
 
     return ngx_http_next_header_filter(r);
