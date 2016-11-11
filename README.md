@@ -3,6 +3,8 @@ nginx_graphdat
 
 graphdat nginx module
 
+## DEPRECATED - This is now longer in use or supported.
+
 This project uses a submodule for common module functionality after cloning this repo you will need to:
 
 ```
